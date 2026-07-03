@@ -1,0 +1,66 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ZapFolder = ReplicatedStorage:FindFirstChild("ZAP")
+local TargetRemote = ZapFolder and ZapFolder:FindFirstChild("ZAP_SCOPE_RELIABLE")
+
+if not TargetRemote then
+    warn("⚠️ No se encontró el RemoteEvent de Zap en ReplicatedStorage.ZAP")
+    return
+end
+
+-- Acceder a la metatabla global de los objetos de Roblox
+local metatable = getrawmetatable(game)
+local oldNamecall = metatable.__namecall
+
+-- Desproteger temporalmente la metatabla para permitir la modificación
+setreadonly(metatable, false)
+
+-- Sobrescribir el metamétodo de llamadas del sistema
+metatable.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    -- Filtrar: Solo nos interesan llamadas a 'FireServer' en el remoto de Zap
+    if self == TargetRemote and method == "FireServer" then
+        local netBuffer = args[1]
+        local instanceList = args[2] or {}
+        
+        if typeof(netBuffer) == "buffer" then
+            print("\n--------------------------------------------------")
+            print("📡 [ZAP SPY] ¡Disparo de Red Detectado!")
+            print(`📦 Tamaño del Buffer: {buffer.len(netBuffer)} bytes`)
+            print(`👥 Instancias adjuntas: {#instanceList}`)
+            
+            -- 1. Extraer el Identificador Numérico (El primer byte)
+            if buffer.len(netBuffer) > 0 then
+                local eventId = buffer.readu8(netBuffer, 0)
+                print(`➡️ ID Interno de la Acción (eventId): {eventId}`)
+                
+                -- 2. Volcado de Bytes Crudos (Hexadecimal) para análisis estructural
+                local hexDump = ""
+                for i = 0, buffer.len(netBuffer) - 1 do
+                    hexDump = hexDump .. string.format("%02X ", buffer.readu8(netBuffer, i))
+                end
+                print(`📊 Contenido Binario (HEX): [ {hexDump}]`)
+                
+                -- 3. Intento de lectura de texto (Si el paquete incluye nombres de variables)
+                if buffer.len(netBuffer) > 4 then
+                    pcall(function()
+                        -- Intentamos leer los primeros caracteres si hay un string empaquetado
+                        local possibleString = buffer.readstring(netBuffer, 4, math.min(buffer.len(netBuffer) - 4, 20))
+                        if #possibleString > 0 and utf8.len(possibleString) then
+                            print(`📝 Texto legible detectado en buffer: "{possibleString}"`)
+                        end
+                    end)
+                end
+            end
+            print("--------------------------------------------------\n")
+        end
+    end
+    
+    -- Devolver la ejecución al comportamiento original del motor del juego
+    return oldNamecall(self, ...)
+end)
+
+-- Volver a proteger la metatabla
+setreadonly(metatable, true)
+print("✅ ZapSpy activado con éxito en la Barra de Comandos. Revisa la consola (Output).")
