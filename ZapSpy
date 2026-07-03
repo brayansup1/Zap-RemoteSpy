@@ -1,52 +1,69 @@
 task.spawn(function()
-    print("🚀 Monitor de Frutas y Teletransporte Activado (Cada 10 min o detección inmediata)...")
-    
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-    local Workspace = game:GetService("Workspace")
-    
-    -- Configuración de rutas según lo que encontraste
-    local SpawnsFolder = Workspace:WaitForChild("Spawns", 5):WaitForChild("Fruits", 5)
-    local NombresFrutas = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
-    
-    -- Función interna para buscar si la fruta ya se renderizó en el Workspace
-    local function verificarYTeletransportar()
-        print(`🕒 [{os.date("%X")}] Ejecutando verificación de rutina...`)
-        
-        -- Buscamos en todo el Workspace si apareció algún modelo con el nombre de las frutas
-        for _, objeto in Workspace:GetDescendants() do
-            if table.find(NombresFrutas, objeto.Name) and (objeto:IsA("Model") or objeto:IsA("BasePart")) then
-                local character = LocalPlayer.Character
-                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                
-                if rootPart then
-                    print(`🍎 ¡Fruta encontrada! {objeto.Name}. Teletransportando...`)
-                    -- Te mueve 3 posiciones arriba de la fruta para no quedar atrapado en el suelo
-                    rootPart.CFrame = objeto:GetPivot() * CFrame.new(0, 3, 0) 
-                    return true
-                end
-            end
-        end
-        return false
-    end
+	print("📡 Monitor de Frutas con Alertas a Discord Activado...")
+	
+	local HttpService = game:GetService("HttpService")
+	local Workspace = game:GetService("Workspace")
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
 
-    -- 1. Escucha en tiempo real: Si Zap la clona en el Workspace, el comando la detecta al instante
-    Workspace.DescendantAdded:Connect(function(descendant)
-        if table.find(NombresFrutas, descendant.Name) then
-            task.wait(0.2) -- Esperar un instante a que se posicione bien el modelo
-            print(`✨ ¡Zap acaba de spawnear una fruta localmente: {descendant.Name}!`)
-            verificarYTeletransportar()
-        end
-    end)
+	-- 1. CONFIGURACIÓN: Pega aquí la URL del Webhook de tu servidor de Discord
+	local URL_WEBHOOK_DISCORD = "https://discord.com/api/webhooks/1522434605725126666/W768jjW3cW-SY6N7qcWGUGZN54RtI3QZDL_b3iN-cP3-Wh7xC2-XjKe0EQ6zIMXGKfvJ"
+	
+	-- Modificamos la URL para pasar por el Proxy compatible con Roblox
+	local urlProxy = string.gsub(URL_WEBHOOK_DISCORD, "https://discord.com", "https://webhook.lewisakura.moe")
+	
+	local NombresFrutas = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
 
-    -- 2. Bucle de respaldo: Revisa minuciosamente cada 10 minutos por si acaso
-    while true do
-        local encontrada = verificarYTeletransportar()
-        if encontrada then
-            print("✅ Teletransporte completado. El monitor seguirá activo.")
-        else
-            print("⏳ No se encontraron frutas clonadas en el mapa en este momento.")
-        end
-        task.wait(600) -- 600 segundos = 10 minutos
-    end
+	-- Función que arma el mensaje y lo manda a Discord
+	local function enviarNotificacionDiscord(nombreFruta, posicion)
+		local datosMensaje = {
+			["username"] = "Fruit Radar Bot",
+			["avatar_url"] = "https://i.imgur.com/wSTFk9g.png", -- Icono del bot
+			["embeds"] = {{
+				["title"] = "🍎 ¡NUEVA FRUTA DETECTADA EN EL MAPA!",
+				["description"] = string.format("El sistema de red local acaba de renderizar una fruta en tu partida."),
+				["color"] = 16711712, -- Color rojo en formato Decimal (RGB)
+				["fields"] = {
+					{["name"] = "🍓 Fruta:", ["value"] = nombreFruta, ["inline"] = true},
+					{["name"] = "👤 Jugador en el Servidor:", ["value"] = LocalPlayer.Name, ["inline"] = true},
+					{["name"] = "📍 Coordenadas aproximadas:", ["value"] = tostring(posicion), ["inline"] = false}
+				},
+				["footer"] = {["text"] = "Sistema de Monitoreo Zap • " .. os.date("%X")}
+			}}
+		}
+
+		-- Convertimos la tabla de Lua a un string JSON legible por Discord
+		local cuerpoJson = HttpService:JSONEncode(datosMensaje)
+		
+		-- Enviamos la petición HTTP Post de forma asíncrona
+		local exito, errorMsg = pcall(function()
+			return game:HttpPostAsync(urlProxy, cuerpoJson, Enum.HttpContentType.ApplicationJson)
+		end)
+
+		if exito then
+			print(`🚀 Alerta enviada a Discord para la fruta: {nombreFruta}`)
+		else
+			warn("❌ Error enviando a Discord (Revisa si activaste Allow HTTP Requests):", errorMsg)
+		end
+	end
+
+	-- Escucha en tiempo real si el cliente clona el modelo de la fruta en Workspace
+	Workspace.DescendantAdded:Connect(function(descendant)
+		if table.find(NombresFrutas, descendant.Name) then
+			task.wait(0.3) -- Esperamos a que el motor actualice su posición final en el mapa
+			
+			local posicionFruta = descendant:GetPivot().Position
+			print(`✨ Detección instantánea: {descendant.Name} en {posicionFruta}`)
+			
+			-- Disparamos la alerta de inmediato
+			enviarNotificacionDiscord(descendant.Name, posicionFruta)
+			
+			-- OPCIONAL: Si además de avisar a Discord quieres que te mueva allí automáticamente:
+			local character = LocalPlayer.Character
+			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+			if rootPart then
+				rootPart.CFrame = descendant:GetPivot() * CFrame.new(0, 3, 0)
+			end
+		end
+	end)
 end)
