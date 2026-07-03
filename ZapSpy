@@ -1,11 +1,11 @@
--- Guardar este script en la carpeta 'autoexec' de tu entorno de pruebas o ejecutar una vez.
--- Se ejecutará automáticamente en cada reconexión (Rejoin / Server Hop).
+-- Guardar este script en tu carpeta 'autoexec' o ejecutarlo.
+-- Forzará un salto a un servidor público diferente en cada reconexión.
 
 local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 
--- 1. ASEGURAR QUE EL JUEGO CARGÓ POR COMPLETO ANTES DE REVISAR
+-- 1. ESPERAR A QUE EL JUEGO CARGUE COMPLEMENTE
 if not game:IsLoaded() then
 	game.Loaded:Wait()
 end
@@ -19,19 +19,19 @@ end
 -- Lista maestra de frutas a escanear
 local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
 
-print(`🕒 [{os.date("%X")}] [Autoexec Radar] Servidor cargado. Iniciando escaneo...`)
-task.wait(1) -- Pausa de seguridad para que los modelos locales de Zap se rendericen
+print(`🕒 [{os.date("%X")}] [Autoexec] Conectado a Servidor: {game.JobId}. Escaneando...`)
+task.wait(1.5) -- Pausa necesaria para que los objetos binarios locales terminen de instanciarse
 
 local encontrada = false
 
--- 2. ESCANEO INSTANTÁNEO EN EL WORKSPACE LOCAL
+-- 2. BÚSQUEDA DIRECTA EN EL WORKSPACE
 for _, o in ipairs(Workspace:GetDescendants()) do
 	if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then
 		local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 		local rootPart = character:WaitForChild("HumanoidRootPart", 5)
 		
 		if rootPart then
-			print(`🎉 ¡FRUTA ENCONTRADA EN LOG IN! -> {o.Name} a las {os.date("%X")}`)
+			print(`🎉 ¡FRUTA DETECTADA EN INICIO! -> {o.Name} a las {os.date("%X")}`)
 			rootPart.CFrame = o:GetPivot() * CFrame.new(0, 3, 0)
 			encontrada = true
 			break
@@ -39,21 +39,25 @@ for _, o in ipairs(Workspace:GetDescendants()) do
 	end
 end
 
--- 3. SI EL MAPA ESTÁ LIMPIO, SALTAR AUTOMÁTICAMENTE SIN ESPERAR
+-- 3. SI EL MAPA ESTÁ LIMPIO, FORZAR SALTO A UN SERVIDOR DIFERENTE
 if not encontrada then
-	print("❌ Mapa limpio en el inicio. Ejecutando salto de servidor automático...")
+	print("❌ Servidor sin frutas. Ejecutando salto forzado a una nueva instancia...")
+	
+	-- Configurar las opciones de teletransporte nativas de Roblox
+	local opciones = Instance.new("TeleportOptions")
+	opciones.ServerInstanceId = "" -- Al dejarlo vacío, le prohíbe a Roblox emparejarte en el JobId actual
 	
 	local success, err = pcall(function()
-		-- Usamos el teletransporte nativo seguro que no requiere HttpGet ni proxies web
-		TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		-- TeleportAsync busca de manera nativa servidores alternativos válidos
+		TeleportService:TeleportAsync(game.PlaceId, {LocalPlayer}, opciones)
 	end)
 	
 	if not success then
-		warn("❌ Error en el salto automático: " .. tostring(err))
-		-- Reintento de bucle en caso de error de conexión de Roblox
-		task.wait(3)
+		warn("❌ Error en TeleportAsync: " .. tostring(err))
+		-- Respaldo de emergencia en caso de fallo de red momentáneo
+		task.wait(2)
 		TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	end
 else
-	print("✅ Objetivo localizado. El salto automático se ha suspendido en este servidor.")
+	print("✅ Proceso en pausa. Disfruta tu fruta en este servidor.")
 end
