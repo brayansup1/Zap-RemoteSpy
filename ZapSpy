@@ -1,4 +1,4 @@
--- Guardar en tu carpeta 'autoexec'. Sistema de ruptura de bucle regional.
+-- Guardar en tu carpeta 'autoexec'. Sistema de Ruptura de Caché por Desconexión Forzada.
 
 local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
@@ -14,27 +14,47 @@ while not LocalPlayer do
 	LocalPlayer = Players.LocalPlayer
 end
 
--- 1. DETECTOR DE REGRESO (ANTI-REPETICIÓN)
--- Usamos los atributos del juego para recordar en qué servidor estuviste antes de saltar
-local ultimoServer = LocalPlayer:GetAttribute("LastServerId")
-if ultimoServer == game.JobId then
-	print("⚠️ [Alerta] Roblox te intentó meter al mismo servidor. Forzando reconexión limpia...")
-	task.wait(1)
-	-- Al usar un teletransporte genérico tras un bloqueo, forzamos la ruptura de caché de red
+-- 1. BASE DE DATOS LOCAL EN CARPETA TEMPORAL (Evita fallos de atributos)
+local carpetaCache = game:GetService("CoreGui"):FindFirstChild("RadarCache")
+if not carpetaCache then
+	carpetaCache = Instance.new("Folder")
+	carpetaCache.Name = "RadarCache"
+	carpetaCache.Parent = game:GetService("CoreGui")
+end
+
+local valorUltimoServer = carpetaCache:FindFirstChild("LastJobId")
+if not valorUltimoServer then
+	valorUltimoServer = Instance.new("StringValue")
+	valorUltimoServer.Name = "LastJobId"
+	valorUltimoServer.Parent = carpetaCache
+end
+
+-- Si caímos exactamente en el mismo servidor de la última vez, ejecutamos desvío agresivo
+if valorUltimoServer.Value == game.JobId then
+	print("🚨 [Bucle Detectado] El motor de Roblox te devolvió a la misma sala. Rompiendo caché...")
+	
+	-- Truco: Romper la persistencia del personaje antes de saltar
+	local character = LocalPlayer.Character
+	if character then
+		character:ClearAllChildren() -- Borra el cuerpo para forzar al juego a sacarte del bucle de red
+	end
+	
+	task.wait(0.5)
 	TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	return
 else
-	LocalPlayer:SetAttribute("LastServerId", game.JobId)
+	-- Guardamos el servidor actual para el próximo frame
+	valorUltimoServer.Value = game.JobId
 end
 
 local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
 
-print(`🕒 [{os.date("%X")}] [Radar Anti-Bucle] Conectado a: {game.JobId}`)
+print(`🕒 [{os.date("%X")}] [Radar Forzado] Conectado a Servidor Nuevo: {game.JobId}`)
 task.wait(1.5)
 
 local frutaObjetivo = nil
 
--- 2. ESCANEO DEL MAPA
+-- 2. ESCANEO DE SPONS LOCALES DE ZAP
 for _, o in ipairs(Workspace:GetDescendants()) do
 	if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then
 		frutaObjetivo = o
@@ -42,7 +62,7 @@ for _, o in ipairs(Workspace:GetDescendants()) do
 	end
 end
 
--- 3. FLUJO DE ACCIONES
+-- 3. CONTROL DE RECOLECCIÓN Y SALTO
 if frutaObjetivo then
 	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local rootPart = character:WaitForChild("HumanoidRootPart", 5)
@@ -51,17 +71,17 @@ if frutaObjetivo then
 		print(`🎉 ¡FRUTA LOCALIZADA! -> {frutaObjetivo.Name} a las {os.date("%X")}`)
 		rootPart.CFrame = frutaObjetivo:GetPivot() * CFrame.new(0, 3, 0)
 		
-		-- Esperar a que la recojas
+		-- Esperar a que la limpies del mapa
 		while frutaObjetivo and frutaObjetivo:IsDescendantOf(Workspace) do
 			task.wait(1)
 		end
 		
-		print("🧹 Fruta recogida. Saltando de servidor...")
+		print("🧹 Mapa limpio de nuevo. Buscando nueva sala...")
 		task.wait(1)
 		TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	end
 else
-	print("❌ Servidor limpio. Cambiando de sala...")
+	print("❌ No hay frutas aquí. Forzando rotación de servidor...")
 	task.wait(0.5)
 	TeleportService:Teleport(game.PlaceId, LocalPlayer)
 end
