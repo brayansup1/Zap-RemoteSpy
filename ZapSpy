@@ -1,10 +1,9 @@
 --!strict
--- Ejecutar en la consola/ejecutor del dispositivo móvil (Entorno Cliente)
+-- Versión Optimizada para Pantallas de Celulares (Landscape)
 
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -19,37 +18,37 @@ local FrutasConfig = {
 	{"Quake", true}, {"Rubber", true}, {"Sand", true}, {"String", true}
 }
 
--- 2. ELIMINAR INTERFAZ PREVIA SI EXISTE (Para evitar duplicados)
+-- Eliminar interfaz previa si existe
 local guiVieja = CoreGui:FindFirstChild("FruitRadarMobile")
 if guiVieja then guiVieja:Destroy() end
 
--- 3. CREACIÓN DE LA ESTRUCTURA VISUAL (GUI)
+-- 2. CREACIÓN DE LA ESTRUCTURA VISUAL
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FruitRadarMobile"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = CoreGui
 
--- Botón Flotante para Abrir/Cerrar (Diseño compacto para móvil)
+-- Botón Flotante para Abrir/Cerrar
 local BotonMenu = Instance.new("TextButton")
 BotonMenu.Name = "AlternarRadar"
-BotonMenu.Size = UDim2.new(0, 60, 0, 60)
+BotonMenu.Size = UDim2.new(0, 50, 0, 50)
 BotonMenu.Position = UDim2.new(0, 10, 0.4, 0)
 BotonMenu.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 BotonMenu.TextColor3 = Color3.fromRGB(255, 255, 255)
 BotonMenu.Text = "🍎"
-BotonMenu.TextSize = 28
+BotonMenu.TextSize = 24
 BotonMenu.Font = Enum.Font.SourceSansBold
 BotonMenu.Parent = ScreenGui
 
 local CornerBoton = Instance.new("UICorner")
-CornerBoton.CornerRadius = UDim.new(0, 15)
+CornerBoton.CornerRadius = UDim.new(0, 12)
 CornerBoton.Parent = BotonMenu
 
--- Ventana Principal del Panel
+-- Ventana Principal (Reducida a 240px de alto para móviles)
 local Panel = Instance.new("Frame")
 Panel.Name = "PanelRadar"
-Panel.Size = UDim2.new(0, 280, 0, 360)
-Panel.Position = UDim2.new(0.5, -140, 0.5, -180)
+Panel.Size = UDim2.new(0, 280, 0, 240)
+Panel.Position = UDim2.new(0.5, -140, 0.5, -120)
 Panel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 Panel.Visible = false
 Panel.Parent = ScreenGui
@@ -60,23 +59,23 @@ CornerPanel.Parent = Panel
 
 -- Título del Menú
 local Titulo = Instance.new("TextLabel")
-Titulo.Size = UDim2.new(1, 0, 0, 40)
+Titulo.Size = UDim2.new(1, 0, 0, 35)
 Titulo.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 Titulo.Text = "  Radar de Frutas • Zap"
 Titulo.TextColor3 = Color3.fromRGB(240, 240, 240)
 Titulo.TextXAlignment = Enum.TextXAlignment.Left
 Titulo.Font = Enum.Font.SourceSansBold
-Titulo.TextSize = 18
+Titulo.TextSize = 16
 Titulo.Parent = Panel
 
 local CornerTitulo = Instance.new("UICorner")
 CornerTitulo.CornerRadius = UDim.new(0, 12)
 CornerTitulo.Parent = Titulo
 
--- Contenedor con Scroll para la lista de frutas
+-- Contenedor con Scroll ajustado
 local ContenedorLista = Instance.new("ScrollingFrame")
-ContenedorLista.Size = UDim2.new(1, -20, 1, -110)
-ContenedorLista.Position = UDim2.new(0, 10, 0, 50)
+ContenedorLista.Size = UDim2.new(1, -20, 1, -85)
+ContenedorLista.Position = UDim2.new(0, 10, 0, 40)
 ContenedorLista.BackgroundTransparency = 1
 ContenedorLista.CanvasSize = UDim2.new(0, 0, 0, #FrutasConfig * 35)
 ContenedorLista.ScrollBarThickness = 4
@@ -86,24 +85,22 @@ local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Padding = UDim.new(0, 5)
 UIListLayout.Parent = ContenedorLista
 
--- Botón de Escaneo Manual
+-- Botón de Escaneo Manual (Ahora 100% visible arriba del borde)
 local BotonEscaneo = Instance.new("TextButton")
-BotonEscaneo.Size = UDim2.new(1, -20, 0, 40)
-BotonEscaneo.Position = UDim2.new(0, 10, 1, -50)
+BotonEscaneo.Size = UDim2.new(1, -20, 0, 35)
+BotonEscaneo.Position = UDim2.new(0, 10, 1, -40)
 BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
 BotonEscaneo.Text = "🔍 ESCANEAR MAPA"
 BotonEscaneo.TextColor3 = Color3.fromRGB(255, 255, 255)
 BotonEscaneo.Font = Enum.Font.SourceSansBold
-BotonEscaneo.TextSize = 16
+BotonEscaneo.TextSize = 14
 BotonEscaneo.Parent = Panel
 
 local CornerEscaneo = Instance.new("UICorner")
 CornerEscaneo.CornerRadius = UDim.new(0, 8)
 CornerEscaneo.Parent = BotonEscaneo
 
--- 4. LOGICA DE INTERACCIÓN (Alternar Estado de Frutas)
-local botonesFrutas = {}
-
+-- 3. GENERAR FILAS DE LA LISTA
 for _, item in ipairs(FrutasConfig) do
 	local nombre = item[1]
 	
@@ -119,21 +116,20 @@ for _, item in ipairs(FrutasConfig) do
 	NombreTexto.TextColor3 = Color3.fromRGB(200, 200, 200)
 	NombreTexto.TextXAlignment = Enum.TextXAlignment.Left
 	NombreTexto.Font = Enum.Font.SourceSans
-	NombreTexto.TextSize = 16
+	NombreTexto.TextSize = 15
 	NombreTexto.Parent = Fila
 	
 	local BotonEstado = Instance.new("TextButton")
 	BotonEstado.Size = UDim2.new(0.35, 0, 1, -4)
 	BotonEstado.Position = UDim2.new(0.65, -5, 0, 2)
 	BotonEstado.Font = Enum.Font.SourceSansBold
-	BotonEstado.TextSize = 12
+	BotonEstado.TextSize = 11
 	BotonEstado.Parent = Fila
 	
 	local CornerB = Instance.new("UICorner")
 	CornerB.CornerRadius = UDim.new(0, 6)
 	CornerB.Parent = BotonEstado
 	
-	-- Función local para actualizar visualmente el botón (ON/OFF)
 	local function actualizarBoton(activo: boolean)
 		if activo then
 			BotonEstado.Text = "BUSCAR"
@@ -149,24 +145,23 @@ for _, item in ipairs(FrutasConfig) do
 	actualizarBoton(item[2])
 	
 	BotonEstado.MouseButton1Click:Connect(function()
-		item[2] = not item[2] -- Alterna el valor booleano en nuestra base de datos
+		item[2] = not item[2]
 		actualizarBoton(item[2])
 	end)
 end
 
--- 5. INTERRUPTOR DE APERTURA / CIERRE DEL PANEL
+-- 4. INTERRUPTOR DE APERTURA / CIERRE
 BotonMenu.MouseButton1Click:Connect(function()
 	Panel.Visible = not Panel.Visible
 	BotonMenu.Text = Panel.Visible and "❌" or "🍎"
 end)
 
--- 6. MOTOR DE ESCANEO Y TELETRANSPORTE FILTRADO
+-- 5. ACCIÓN DEL BOTÓN DE ESCANEO
 BotonEscaneo.MouseButton1Click:Connect(function()
 	BotonEscaneo.Text = "ESCANEANDO..."
 	BotonEscaneo.BackgroundColor3 = Color3.fromRGB(230, 126, 34)
-	task.wait(0.3)
+	task.wait(0.2)
 	
-	-- Crear una lista limpia de lo que el usuario quiere buscar actualmente
 	local listaFiltroActiva = {}
 	for _, item in ipairs(FrutasConfig) do
 		if item[2] == true then
@@ -176,14 +171,13 @@ BotonEscaneo.MouseButton1Click:Connect(function()
 	
 	local encontrada = false
 	
-	-- Barrido por el Workspace del juego
 	for _, objeto in ipairs(Workspace:GetDescendants()) do
 		if table.find(listaFiltroActiva, objeto.Name) and (objeto:IsA("Model") or objeto:IsA("BasePart")) then
 			local character = LocalPlayer.Character
 			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 			
 			if rootPart then
-				print(`🎯 [Radar] ¡Fruta seleccionada localizada!: {objeto.Name} a las {os.date("%X")}`)
+				print(`🎯 [Radar] Localizada: {objeto.Name} en {tostring(objeto:GetPivot().Position)}`)
 				rootPart.CFrame = objeto:GetPivot() * CFrame.new(0, 3, 0)
 				encontrada = true
 				break
@@ -191,7 +185,6 @@ BotonEscaneo.MouseButton1Click:Connect(function()
 		end
 	end
 	
-	-- Retroalimentación visual en el botón tras el escaneo
 	if encontrada then
 		BotonEscaneo.Text = "✅ ¡FRUTA ENCONTRADA!"
 		BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
@@ -200,9 +193,7 @@ BotonEscaneo.MouseButton1Click:Connect(function()
 		BotonEscaneo.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
 	end
 	
-	task.wait(1.5)
+	task.wait(1.2)
 	BotonEscaneo.Text = "🔍 ESCANEAR MAPA"
 	BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
 end)
-
-print("✅ Interfaz de Radar Móvil cargada con éxito. Presiona el botón de la manzana 🍎.")
