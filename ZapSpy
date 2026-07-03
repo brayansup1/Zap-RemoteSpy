@@ -1,14 +1,13 @@
 local TS = game:GetService("TeleportService")
-local HS = game:GetService("HttpService")
 local W = game:GetService("Workspace")
 local LP = game:GetService("Players").LocalPlayer
 
 local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
 
-print(`🕒 [{os.date("%X")}] Iniciando escaneo directo...`)
+print(`🕒 [{os.date("%X")}] Iniciando escaneo nativo seguro...`)
 local encontrada = false
 
--- Escaneo directo en el hilo principal
+-- 1. Escaneo directo en el Workspace local
 for _, o in ipairs(W:GetDescendants()) do
 	if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then
 		local c = LP.Character
@@ -22,29 +21,17 @@ for _, o in ipairs(W:GetDescendants()) do
 	end
 end
 
+-- 2. Si no hay fruta, hacemos el Server Hop sin usar HttpGet
 if not encontrada then
-	print("❌ No hay frutas aquí. Saltando de servidor...")
-	local url = "https://games.roproxy.com/v1/games/" .. tostring(game.PlaceId) .. "/servers/Public?sortOrder=Asc&limit=100"
-	local ok, res = pcall(function() return game:HttpGet(url) end)
+	print("❌ No hay frutas aquí. Ejecutando salto de servidor nativo seguro...")
 	
-	if ok and res then
-		local data = HS:JSONDecode(res)
-		local svs = {}
-		if data and data.data then
-			for _, s in ipairs(data.data) do
-				if s.playing < s.maxPlayers and s.id ~= game.JobId then
-					table.insert(svs, s.id)
-				end
-			end
-		end
-		if #svs > 0 then
-			local nextSv = svs[math.random(1, #svs)]
-			print("🚀 Conectando a un nuevo servidor: " .. tostring(nextSv))
-			TS:TeleportToPlaceInstance(game.PlaceId, nextSv, LP)
-		else
-			warn("⏳ Todos los servidores alternativos están llenos.")
-		end
-	else
-		warn("❌ El proxy web no respondió. Intenta presionar la flecha arriba y ejecutar de nuevo.")
+	-- Forzamos el teletransporte al mismo PlaceId. El motor de emparejamiento de Roblox
+	-- se encargará de buscar de forma nativa otro servidor público disponible.
+	local success, err = pcall(function()
+		TS:Teleport(game.PlaceId, LP)
+	end)
+	
+	if not success then
+		warn("❌ Falló el teletransporte nativo: " .. tostring(err))
 	end
 end
