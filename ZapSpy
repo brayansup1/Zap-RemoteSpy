@@ -1,37 +1,59 @@
-local TS = game:GetService("TeleportService")
-local W = game:GetService("Workspace")
-local LP = game:GetService("Players").LocalPlayer
+-- Guardar este script en la carpeta 'autoexec' de tu entorno de pruebas o ejecutar una vez.
+-- Se ejecutará automáticamente en cada reconexión (Rejoin / Server Hop).
 
+local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+
+-- 1. ASEGURAR QUE EL JUEGO CARGÓ POR COMPLETO ANTES DE REVISAR
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+
+local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+	task.wait(0.1)
+	LocalPlayer = Players.LocalPlayer
+end
+
+-- Lista maestra de frutas a escanear
 local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
 
-print(`🕒 [{os.date("%X")}] Iniciando escaneo nativo seguro...`)
+print(`🕒 [{os.date("%X")}] [Autoexec Radar] Servidor cargado. Iniciando escaneo...`)
+task.wait(1) -- Pausa de seguridad para que los modelos locales de Zap se rendericen
+
 local encontrada = false
 
--- 1. Escaneo directo en el Workspace local
-for _, o in ipairs(W:GetDescendants()) do
+-- 2. ESCANEO INSTANTÁNEO EN EL WORKSPACE LOCAL
+for _, o in ipairs(Workspace:GetDescendants()) do
 	if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then
-		local c = LP.Character
-		local r = c and c:FindFirstChild("HumanoidRootPart")
-		if r then
-			print(`🎉 ¡FRUTA DETECTADA! -> {o.Name} a las {os.date("%X")}`)
-			r.CFrame = o:GetPivot() * CFrame.new(0, 3, 0)
+		local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+		local rootPart = character:WaitForChild("HumanoidRootPart", 5)
+		
+		if rootPart then
+			print(`🎉 ¡FRUTA ENCONTRADA EN LOG IN! -> {o.Name} a las {os.date("%X")}`)
+			rootPart.CFrame = o:GetPivot() * CFrame.new(0, 3, 0)
 			encontrada = true
 			break
 		end
 	end
 end
 
--- 2. Si no hay fruta, hacemos el Server Hop sin usar HttpGet
+-- 3. SI EL MAPA ESTÁ LIMPIO, SALTAR AUTOMÁTICAMENTE SIN ESPERAR
 if not encontrada then
-	print("❌ No hay frutas aquí. Ejecutando salto de servidor nativo seguro...")
+	print("❌ Mapa limpio en el inicio. Ejecutando salto de servidor automático...")
 	
-	-- Forzamos el teletransporte al mismo PlaceId. El motor de emparejamiento de Roblox
-	-- se encargará de buscar de forma nativa otro servidor público disponible.
 	local success, err = pcall(function()
-		TS:Teleport(game.PlaceId, LP)
+		-- Usamos el teletransporte nativo seguro que no requiere HttpGet ni proxies web
+		TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	end)
 	
 	if not success then
-		warn("❌ Falló el teletransporte nativo: " .. tostring(err))
+		warn("❌ Error en el salto automático: " .. tostring(err))
+		-- Reintento de bucle en caso de error de conexión de Roblox
+		task.wait(3)
+		TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	end
+else
+	print("✅ Objetivo localizado. El salto automático se ha suspendido en este servidor.")
 end
