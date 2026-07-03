@@ -1,4 +1,4 @@
--- Guardar en tu carpeta 'autoexec'. Servidores reservados exclusivos.
+-- Guardar en tu carpeta 'autoexec'. Sistema de ruptura de bucle regional.
 
 local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
@@ -14,32 +14,27 @@ while not LocalPlayer do
 	LocalPlayer = Players.LocalPlayer
 end
 
-local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
-
--- FUNCIÓN PARA CREAR Y SALTAR A UN SERVIDOR RESERVADO FRESCO
-local function iniciarServerHopExclusivo()
-	print("🌀 Generando un servidor reservado completamente nuevo...")
-	
-	local success, result = pcall(function()
-		-- Reservamos un código de acceso único para una sala limpia
-		local codigoReserva, _ = TeleportService:ReserveServer(game.PlaceId)
-		-- Nos teletransportamos de forma directa usando ese código
-		TeleportService:TeleportToPrivateServer(game.PlaceId, codigoReserva, {LocalPlayer})
-	end)
-	
-	if not success then
-		warn("❌ Falló la reserva nativa, usando emparejamiento estándar de respaldo: " .. tostring(result))
-		task.wait(2)
-		TeleportService:Teleport(game.PlaceId, LocalPlayer)
-	end
+-- 1. DETECTOR DE REGRESO (ANTI-REPETICIÓN)
+-- Usamos los atributos del juego para recordar en qué servidor estuviste antes de saltar
+local ultimoServer = LocalPlayer:GetAttribute("LastServerId")
+if ultimoServer == game.JobId then
+	print("⚠️ [Alerta] Roblox te intentó meter al mismo servidor. Forzando reconexión limpia...")
+	task.wait(1)
+	-- Al usar un teletransporte genérico tras un bloqueo, forzamos la ruptura de caché de red
+	TeleportService:Teleport(game.PlaceId, LocalPlayer)
+	return
+else
+	LocalPlayer:SetAttribute("LastServerId", game.JobId)
 end
 
-print(`🕒 [{os.date("%X")}] [Radar Reservado] Analizando entorno...`)
+local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
+
+print(`🕒 [{os.date("%X")}] [Radar Anti-Bucle] Conectado a: {game.JobId}`)
 task.wait(1.5)
 
 local frutaObjetivo = nil
 
--- 1. BUSQUEDA DIRECTA
+-- 2. ESCANEO DEL MAPA
 for _, o in ipairs(Workspace:GetDescendants()) do
 	if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then
 		frutaObjetivo = o
@@ -47,27 +42,26 @@ for _, o in ipairs(Workspace:GetDescendants()) do
 	end
 end
 
--- 2. EVALUACIÓN DE ACCIONES CONTINUAS
+-- 3. FLUJO DE ACCIONES
 if frutaObjetivo then
 	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local rootPart = character:WaitForChild("HumanoidRootPart", 5)
 	
 	if rootPart then
-		print(`🎉 ¡FRUTA DETECTADA! -> {frutaObjetivo.Name} a las {os.date("%X")}`)
+		print(`🎉 ¡FRUTA LOCALIZADA! -> {frutaObjetivo.Name} a las {os.date("%X")}`)
 		rootPart.CFrame = frutaObjetivo:GetPivot() * CFrame.new(0, 3, 0)
 		
-		print("⏳ Monitoreando recolección para preparar el próximo servidor exclusivo...")
-		
-		-- Espera a que recojas la fruta (desaparezca del Workspace)
+		-- Esperar a que la recojas
 		while frutaObjetivo and frutaObjetivo:IsDescendantOf(Workspace) do
 			task.wait(1)
 		end
 		
-		print("🧹 Fruta recolectada. Limpiando sesión...")
+		print("🧹 Fruta recogida. Saltando de servidor...")
 		task.wait(1)
-		iniciarServerHopExclusivo()
+		TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	end
 else
-	print("❌ Este servidor no contiene spawns activos. Saltando de inmediato...")
-	iniciarServerHopExclusivo()
+	print("❌ Servidor limpio. Cambiando de sala...")
+	task.wait(0.5)
+	TeleportService:Teleport(game.PlaceId, LocalPlayer)
 end
