@@ -1,4 +1,4 @@
--- Guardar en tu carpeta 'autoexec'. Flujo infinito e inteligente.
+-- Guardar en tu carpeta 'autoexec'. Servidores reservados exclusivos.
 
 local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
@@ -16,29 +16,30 @@ end
 
 local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
 
--- Función segura para cambiar de servidor
-local function iniciarServerHop()
-	print("❌ Ejecutando salto forzado a una nueva instancia de servidor...")
-	local opciones = Instance.new("TeleportOptions")
-	opciones.ServerInstanceId = "" 
+-- FUNCIÓN PARA CREAR Y SALTAR A UN SERVIDOR RESERVADO FRESCO
+local function iniciarServerHopExclusivo()
+	print("🌀 Generando un servidor reservado completamente nuevo...")
 	
-	local success, err = pcall(function()
-		TeleportService:TeleportAsync(game.PlaceId, {LocalPlayer}, opciones)
+	local success, result = pcall(function()
+		-- Reservamos un código de acceso único para una sala limpia
+		local codigoReserva, _ = TeleportService:ReserveServer(game.PlaceId)
+		-- Nos teletransportamos de forma directa usando ese código
+		TeleportService:TeleportToPrivateServer(game.PlaceId, codigoReserva, {LocalPlayer})
 	end)
 	
 	if not success then
-		warn("❌ Error en TeleportAsync: " .. tostring(err))
+		warn("❌ Falló la reserva nativa, usando emparejamiento estándar de respaldo: " .. tostring(result))
 		task.wait(2)
 		TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	end
 end
 
-print(`🕒 [{os.date("%X")}] [Radar Continuo] Escaneando servidor...`)
+print(`🕒 [{os.date("%X")}] [Radar Reservado] Analizando entorno...`)
 task.wait(1.5)
 
 local frutaObjetivo = nil
 
--- 1. BUSQUEDA INICIAL
+-- 1. BUSQUEDA DIRECTA
 for _, o in ipairs(Workspace:GetDescendants()) do
 	if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then
 		frutaObjetivo = o
@@ -46,27 +47,27 @@ for _, o in ipairs(Workspace:GetDescendants()) do
 	end
 end
 
--- 2. EVALUACIÓN DE ACCIONES
+-- 2. EVALUACIÓN DE ACCIONES CONTINUAS
 if frutaObjetivo then
 	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local rootPart = character:WaitForChild("HumanoidRootPart", 5)
 	
 	if rootPart then
-		print(`🎉 ¡FRUTA DETECTADA! -> {frutaObjetivo.Name} encontrada a las {os.date("%X")}`)
+		print(`🎉 ¡FRUTA DETECTADA! -> {frutaObjetivo.Name} a las {os.date("%X")}`)
 		rootPart.CFrame = frutaObjetivo:GetPivot() * CFrame.new(0, 3, 0)
 		
-		print("⏳ Esperando a que recolectes la fruta para continuar el viaje...")
+		print("⏳ Monitoreando recolección para preparar el próximo servidor exclusivo...")
 		
-		-- Bucle de espera: Se queda congelado aquí MIENTRAS la fruta exista en el juego
+		-- Espera a que recojas la fruta (desaparezca del Workspace)
 		while frutaObjetivo and frutaObjetivo:IsDescendantOf(Workspace) do
-			task.wait(1) -- Revisa cada segundo si la fruta sigue ahí
+			task.wait(1)
 		end
 		
-		print("🧹 La fruta ha desaparecido (recolectada). Reactivando Radar...")
+		print("🧹 Fruta recolectada. Limpiando sesión...")
 		task.wait(1)
-		iniciarServerHop()
+		iniciarServerHopExclusivo()
 	end
 else
-	print("❌ Este servidor no tiene frutas activas.")
-	iniciarServerHop()
+	print("❌ Este servidor no contiene spawns activos. Saltando de inmediato...")
+	iniciarServerHopExclusivo()
 end
