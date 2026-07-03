@@ -1,87 +1,208 @@
--- Guardar en tu carpeta 'autoexec'. Sistema de Ruptura de Caché por Desconexión Forzada.
+--!strict
+-- Ejecutar en la consola/ejecutor del dispositivo móvil (Entorno Cliente)
 
-local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
-
-if not game:IsLoaded() then
-	game.Loaded:Wait()
-end
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
-while not LocalPlayer do
-	task.wait(0.1)
+if not LocalPlayer then
+	Players:GetService("RunService").Heartbeat:Wait()
 	LocalPlayer = Players.LocalPlayer
 end
 
--- 1. BASE DE DATOS LOCAL EN CARPETA TEMPORAL (Evita fallos de atributos)
-local carpetaCache = game:GetService("CoreGui"):FindFirstChild("RadarCache")
-if not carpetaCache then
-	carpetaCache = Instance.new("Folder")
-	carpetaCache.Name = "RadarCache"
-	carpetaCache.Parent = game:GetService("CoreGui")
-end
+-- 1. BASE DE DATOS Y PREFERENCIAS DE FRUTAS
+local FrutasConfig = {
+	{"Budha", true}, {"Chop", true}, {"Flame", true}, {"Gear2", true},
+	{"Ice", true}, {"Light", true}, {"Magma", true}, {"Mochi", true},
+	{"Quake", true}, {"Rubber", true}, {"Sand", true}, {"String", true}
+}
 
-local valorUltimoServer = carpetaCache:FindFirstChild("LastJobId")
-if not valorUltimoServer then
-	valorUltimoServer = Instance.new("StringValue")
-	valorUltimoServer.Name = "LastJobId"
-	valorUltimoServer.Parent = carpetaCache
-end
+-- 2. ELIMINAR INTERFAZ PREVIA SI EXISTE (Para evitar duplicados)
+local guiVieja = CoreGui:FindFirstChild("FruitRadarMobile")
+if guiVieja then guiVieja:Destroy() end
 
--- Si caímos exactamente en el mismo servidor de la última vez, ejecutamos desvío agresivo
-if valorUltimoServer.Value == game.JobId then
-	print("🚨 [Bucle Detectado] El motor de Roblox te devolvió a la misma sala. Rompiendo caché...")
+-- 3. CREACIÓN DE LA ESTRUCTURA VISUAL (GUI)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FruitRadarMobile"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = CoreGui
+
+-- Botón Flotante para Abrir/Cerrar (Diseño compacto para móvil)
+local BotonMenu = Instance.new("TextButton")
+BotonMenu.Name = "AlternarRadar"
+BotonMenu.Size = UDim2.new(0, 60, 0, 60)
+BotonMenu.Position = UDim2.new(0, 10, 0.4, 0)
+BotonMenu.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+BotonMenu.TextColor3 = Color3.fromRGB(255, 255, 255)
+BotonMenu.Text = "🍎"
+BotonMenu.TextSize = 28
+BotonMenu.Font = Enum.Font.SourceSansBold
+BotonMenu.Parent = ScreenGui
+
+local CornerBoton = Instance.new("UICorner")
+CornerBoton.CornerRadius = UDim.new(0, 15)
+CornerBoton.Parent = BotonMenu
+
+-- Ventana Principal del Panel
+local Panel = Instance.new("Frame")
+Panel.Name = "PanelRadar"
+Panel.Size = UDim2.new(0, 280, 0, 360)
+Panel.Position = UDim2.new(0.5, -140, 0.5, -180)
+Panel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+Panel.Visible = false
+Panel.Parent = ScreenGui
+
+local CornerPanel = Instance.new("UICorner")
+CornerPanel.CornerRadius = UDim.new(0, 12)
+CornerPanel.Parent = Panel
+
+-- Título del Menú
+local Titulo = Instance.new("TextLabel")
+Titulo.Size = UDim2.new(1, 0, 0, 40)
+Titulo.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+Titulo.Text = "  Radar de Frutas • Zap"
+Titulo.TextColor3 = Color3.fromRGB(240, 240, 240)
+Titulo.TextXAlignment = Enum.TextXAlignment.Left
+Titulo.Font = Enum.Font.SourceSansBold
+Titulo.TextSize = 18
+Titulo.Parent = Panel
+
+local CornerTitulo = Instance.new("UICorner")
+CornerTitulo.CornerRadius = UDim.new(0, 12)
+CornerTitulo.Parent = Titulo
+
+-- Contenedor con Scroll para la lista de frutas
+local ContenedorLista = Instance.new("ScrollingFrame")
+ContenedorLista.Size = UDim2.new(1, -20, 1, -110)
+ContenedorLista.Position = UDim2.new(0, 10, 0, 50)
+ContenedorLista.BackgroundTransparency = 1
+ContenedorLista.CanvasSize = UDim2.new(0, 0, 0, #FrutasConfig * 35)
+ContenedorLista.ScrollBarThickness = 4
+ContenedorLista.Parent = Panel
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 5)
+UIListLayout.Parent = ContenedorLista
+
+-- Botón de Escaneo Manual
+local BotonEscaneo = Instance.new("TextButton")
+BotonEscaneo.Size = UDim2.new(1, -20, 0, 40)
+BotonEscaneo.Position = UDim2.new(0, 10, 1, -50)
+BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+BotonEscaneo.Text = "🔍 ESCANEAR MAPA"
+BotonEscaneo.TextColor3 = Color3.fromRGB(255, 255, 255)
+BotonEscaneo.Font = Enum.Font.SourceSansBold
+BotonEscaneo.TextSize = 16
+BotonEscaneo.Parent = Panel
+
+local CornerEscaneo = Instance.new("UICorner")
+CornerEscaneo.CornerRadius = UDim.new(0, 8)
+CornerEscaneo.Parent = BotonEscaneo
+
+-- 4. LOGICA DE INTERACCIÓN (Alternar Estado de Frutas)
+local botonesFrutas = {}
+
+for _, item in ipairs(FrutasConfig) do
+	local nombre = item[1]
 	
-	-- Truco: Romper la persistencia del personaje antes de saltar
-	local character = LocalPlayer.Character
-	if character then
-		character:ClearAllChildren() -- Borra el cuerpo para forzar al juego a sacarte del bucle de red
-	end
+	local Fila = Instance.new("Frame")
+	Fila.Size = UDim2.new(1, -5, 0, 30)
+	Fila.BackgroundTransparency = 1
+	Fila.Parent = ContenedorLista
 	
-	task.wait(0.5)
-	TeleportService:Teleport(game.PlaceId, LocalPlayer)
-	return
-else
-	-- Guardamos el servidor actual para el próximo frame
-	valorUltimoServer.Value = game.JobId
-end
-
-local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
-
-print(`🕒 [{os.date("%X")}] [Radar Forzado] Conectado a Servidor Nuevo: {game.JobId}`)
-task.wait(1.5)
-
-local frutaObjetivo = nil
-
--- 2. ESCANEO DE SPONS LOCALES DE ZAP
-for _, o in ipairs(Workspace:GetDescendants()) do
-	if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then
-		frutaObjetivo = o
-		break
-	end
-end
-
--- 3. CONTROL DE RECOLECCIÓN Y SALTO
-if frutaObjetivo then
-	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-	local rootPart = character:WaitForChild("HumanoidRootPart", 5)
+	local NombreTexto = Instance.new("TextLabel")
+	NombreTexto.Size = UDim2.new(0.6, 0, 1, 0)
+	NombreTexto.BackgroundTransparency = 1
+	NombreTexto.Text = "  " .. nombre
+	NombreTexto.TextColor3 = Color3.fromRGB(200, 200, 200)
+	NombreTexto.TextXAlignment = Enum.TextXAlignment.Left
+	NombreTexto.Font = Enum.Font.SourceSans
+	NombreTexto.TextSize = 16
+	NombreTexto.Parent = Fila
 	
-	if rootPart then
-		print(`🎉 ¡FRUTA LOCALIZADA! -> {frutaObjetivo.Name} a las {os.date("%X")}`)
-		rootPart.CFrame = frutaObjetivo:GetPivot() * CFrame.new(0, 3, 0)
-		
-		-- Esperar a que la limpies del mapa
-		while frutaObjetivo and frutaObjetivo:IsDescendantOf(Workspace) do
-			task.wait(1)
+	local BotonEstado = Instance.new("TextButton")
+	BotonEstado.Size = UDim2.new(0.35, 0, 1, -4)
+	BotonEstado.Position = UDim2.new(0.65, -5, 0, 2)
+	BotonEstado.Font = Enum.Font.SourceSansBold
+	BotonEstado.TextSize = 12
+	BotonEstado.Parent = Fila
+	
+	local CornerB = Instance.new("UICorner")
+	CornerB.CornerRadius = UDim.new(0, 6)
+	CornerB.Parent = BotonEstado
+	
+	-- Función local para actualizar visualmente el botón (ON/OFF)
+	local function actualizarBoton(activo: boolean)
+		if activo then
+			BotonEstado.Text = "BUSCAR"
+			BotonEstado.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
+			BotonEstado.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			BotonEstado.Text = "IGNORAR"
+			BotonEstado.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+			BotonEstado.TextColor3 = Color3.fromRGB(130, 130, 130)
 		end
-		
-		print("🧹 Mapa limpio de nuevo. Buscando nueva sala...")
-		task.wait(1)
-		TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	end
-else
-	print("❌ No hay frutas aquí. Forzando rotación de servidor...")
-	task.wait(0.5)
-	TeleportService:Teleport(game.PlaceId, LocalPlayer)
+	
+	actualizarBoton(item[2])
+	
+	BotonEstado.MouseButton1Click:Connect(function()
+		item[2] = not item[2] -- Alterna el valor booleano en nuestra base de datos
+		actualizarBoton(item[2])
+	end)
 end
+
+-- 5. INTERRUPTOR DE APERTURA / CIERRE DEL PANEL
+BotonMenu.MouseButton1Click:Connect(function()
+	Panel.Visible = not Panel.Visible
+	BotonMenu.Text = Panel.Visible and "❌" or "🍎"
+end)
+
+-- 6. MOTOR DE ESCANEO Y TELETRANSPORTE FILTRADO
+BotonEscaneo.MouseButton1Click:Connect(function()
+	BotonEscaneo.Text = "ESCANEANDO..."
+	BotonEscaneo.BackgroundColor3 = Color3.fromRGB(230, 126, 34)
+	task.wait(0.3)
+	
+	-- Crear una lista limpia de lo que el usuario quiere buscar actualmente
+	local listaFiltroActiva = {}
+	for _, item in ipairs(FrutasConfig) do
+		if item[2] == true then
+			table.insert(listaFiltroActiva, item[1])
+		end
+	end
+	
+	local encontrada = false
+	
+	-- Barrido por el Workspace del juego
+	for _, objeto in ipairs(Workspace:GetDescendants()) do
+		if table.find(listaFiltroActiva, objeto.Name) and (objeto:IsA("Model") or objeto:IsA("BasePart")) then
+			local character = LocalPlayer.Character
+			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+			
+			if rootPart then
+				print(`🎯 [Radar] ¡Fruta seleccionada localizada!: {objeto.Name} a las {os.date("%X")}`)
+				rootPart.CFrame = objeto:GetPivot() * CFrame.new(0, 3, 0)
+				encontrada = true
+				break
+			end
+		end
+	end
+	
+	-- Retroalimentación visual en el botón tras el escaneo
+	if encontrada then
+		BotonEscaneo.Text = "✅ ¡FRUTA ENCONTRADA!"
+		BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+	else
+		BotonEscaneo.Text = "❌ SIN FRUTAS ACTIVAS"
+		BotonEscaneo.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+	end
+	
+	task.wait(1.5)
+	BotonEscaneo.Text = "🔍 ESCANEAR MAPA"
+	BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+end)
+
+print("✅ Interfaz de Radar Móvil cargada con éxito. Presiona el botón de la manzana 🍎.")
