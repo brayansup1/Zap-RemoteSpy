@@ -1,1 +1,50 @@
-local TS = game:GetService("TeleportService"); local HS = game:GetService("HttpService"); local W = game:GetService("Workspace"); local P = game:GetService("Players"); local LP = P.LocalPlayer or P:GetPlayers()[1]; local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}; local function hop() print("🌐 Buscando servidor alternativo..."); local url = "https://games.roproxy.com/v1/games/" .. tostring(game.PlaceId) .. "/servers/Public?sortOrder=Asc&limit=100"; local ok, res = pcall(function() return game:HttpGet(url) end); if ok and res then local data = HS:JSONDecode(res); local svs = {}; if data and data.data then for _, s in ipairs(data.data) do if s.playing < s.maxPlayers and s.id ~= game.JobId then table.insert(svs, s.id) end end end; if #svs > 0 then local nextSv = svs[math.random(1, #svs)]; print("🚀 Saltando al servidor: " .. tostring(nextSv)); TS:TeleportToPlaceInstance(game.PlaceId, nextSv, LP) else warn("⏳ No se encontraron servidores con espacio.") end else warn("❌ Error en la solicitud HTTP del proxy.") end end; local function scan() print(`🕒 [{os.date("%X")}] Analizando el Workspace actual...`); for _, o in ipairs(W:GetDescendants()) do if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then local c = LP.Character; local r = c and c:FindFirstChild("HumanoidRootPart"); if r then print(`🎉 ¡FRUTA DETECTADA! -> {o.Name} a las {os.date("%X")}`); r.CFrame = o:GetPivot() * CFrame.new(0, 3, 0); return true end end end; return false end; task.spawn(function() task.wait(1); if not scan() then print("❌ Mapa limpio. Saltando de servidor..."); task.wait(0.5); hop() else print("✅ Fruta encontrada. Escaneo pausado.") end end)
+local TS = game:GetService("TeleportService")
+local HS = game:GetService("HttpService")
+local W = game:GetService("Workspace")
+local LP = game:GetService("Players").LocalPlayer
+
+local fList = {"Budha", "Chop", "Flame", "Gear2", "Ice", "Light", "Magma", "Mochi", "Quake", "Rubber", "Sand", "String"}
+
+print(`🕒 [{os.date("%X")}] Iniciando escaneo directo...`)
+local encontrada = false
+
+-- Escaneo directo en el hilo principal
+for _, o in ipairs(W:GetDescendants()) do
+	if table.find(fList, o.Name) and (o:IsA("Model") or o:IsA("BasePart")) then
+		local c = LP.Character
+		local r = c and c:FindFirstChild("HumanoidRootPart")
+		if r then
+			print(`🎉 ¡FRUTA DETECTADA! -> {o.Name} a las {os.date("%X")}`)
+			r.CFrame = o:GetPivot() * CFrame.new(0, 3, 0)
+			encontrada = true
+			break
+		end
+	end
+end
+
+if not encontrada then
+	print("❌ No hay frutas aquí. Saltando de servidor...")
+	local url = "https://games.roproxy.com/v1/games/" .. tostring(game.PlaceId) .. "/servers/Public?sortOrder=Asc&limit=100"
+	local ok, res = pcall(function() return game:HttpGet(url) end)
+	
+	if ok and res then
+		local data = HS:JSONDecode(res)
+		local svs = {}
+		if data and data.data then
+			for _, s in ipairs(data.data) do
+				if s.playing < s.maxPlayers and s.id ~= game.JobId then
+					table.insert(svs, s.id)
+				end
+			end
+		end
+		if #svs > 0 then
+			local nextSv = svs[math.random(1, #svs)]
+			print("🚀 Conectando a un nuevo servidor: " .. tostring(nextSv))
+			TS:TeleportToPlaceInstance(game.PlaceId, nextSv, LP)
+		else
+			warn("⏳ Todos los servidores alternativos están llenos.")
+		end
+	else
+		warn("❌ El proxy web no respondió. Intenta presionar la flecha arriba y ejecutar de nuevo.")
+	end
+end
