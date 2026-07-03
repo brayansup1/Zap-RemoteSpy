@@ -1,9 +1,10 @@
 --!strict
--- Versión Móvil Lateral Derecha con Automatizador Constante de Fondo
+-- Versión Móvil Arrastrable con Interruptor de Escaneo Constante
 
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -11,28 +12,25 @@ if not LocalPlayer then
 	LocalPlayer = Players.LocalPlayer
 end
 
--- 1. CONFIGURACIÓN Y FILTROS DE FRUTAS
 local FrutasConfig = {
 	{"Budha", true}, {"Chop", true}, {"Flame", true}, {"Gear2", true},
 	{"Ice", true}, {"Light", true}, {"Magma", true}, {"Mochi", true},
 	{"Quake", true}, {"Rubber", true}, {"Sand", true}, {"String", true}
 }
 
--- Eliminar interfaz previa si existe
 local guiVieja = CoreGui:FindFirstChild("FruitRadarMobile")
 if guiVieja then guiVieja:Destroy() end
 
--- 2. ESTRUCTURA DE LA INTERFAZ (GUI)
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FruitRadarMobile"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = CoreGui
 
--- Botón Flotante Compacto (Lado Derecho para pulgar)
+-- Botón Flotante Inicial
 local BotonMenu = Instance.new("TextButton")
 BotonMenu.Name = "AlternarRadar"
 BotonMenu.Size = UDim2.new(0, 45, 0, 45)
-BotonMenu.Position = UDim2.new(1, -60, 0.15, 0) -- Esquina superior derecha
+BotonMenu.Position = UDim2.new(1, -55, 0.15, 0)
 BotonMenu.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 BotonMenu.TextColor3 = Color3.fromRGB(255, 255, 255)
 BotonMenu.Text = "🍎"
@@ -44,11 +42,11 @@ local CornerBoton = Instance.new("UICorner")
 CornerBoton.CornerRadius = UDim.new(0, 10)
 CornerBoton.Parent = BotonMenu
 
--- Ventana Principal Lateral Derecha (Ultra compacta y accesible)
+-- Ventana Principal Reducida
 local Panel = Instance.new("Frame")
 Panel.Name = "PanelRadar"
-Panel.Size = UDim2.new(0, 220, 0, 200)
-Panel.Position = UDim2.new(1, -235, 0.15, 55)
+Panel.Size = UDim2.new(0, 190, 0, 180) -- Tamaño ultra compacto
+Panel.Position = UDim2.new(1, -205, 0.15, 50)
 Panel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 Panel.Visible = false
 Panel.Parent = ScreenGui
@@ -57,55 +55,53 @@ local CornerPanel = Instance.new("UICorner")
 CornerPanel.CornerRadius = UDim.new(0, 10)
 CornerPanel.Parent = Panel
 
--- Título del Menú
+-- Título (Sirve como barra de arrastre)
 local Titulo = Instance.new("TextLabel")
-Titulo.Size = UDim2.new(1, 0, 0, 30)
+Titulo.Size = UDim2.new(1, 0, 0, 25)
 Titulo.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-Titulo.Text = "  Radar de Frutas"
+Titulo.Text = "  [Arrástrame] Radar"
 Titulo.TextColor3 = Color3.fromRGB(240, 240, 240)
 Titulo.TextXAlignment = Enum.TextXAlignment.Left
 Titulo.Font = Enum.Font.SourceSansBold
-Titulo.TextSize = 14
+Titulo.TextSize = 12
 Titulo.Parent = Panel
 
 local CornerTitulo = Instance.new("UICorner")
 CornerTitulo.CornerRadius = UDim.new(0, 10)
 CornerTitulo.Parent = Titulo
 
--- Contenedor con Scroll Táctil
 local ContenedorLista = Instance.new("ScrollingFrame")
-ContenedorLista.Size = UDim2.new(1, -15, 1, -75)
-ContenedorLista.Position = UDim2.new(0, 8, 0, 35)
+ContenedorLista.Size = UDim2.new(1, -10, 1, -65)
+ContenedorLista.Position = UDim2.new(0, 5, 0, 30)
 ContenedorLista.BackgroundTransparency = 1
-ContenedorLista.CanvasSize = UDim2.new(0, 0, 0, #FrutasConfig * 32)
-ContenedorLista.ScrollBarThickness = 3
+ContenedorLista.CanvasSize = UDim2.new(0, 0, 0, #FrutasConfig * 26)
+ContenedorLista.ScrollBarThickness = 2
 ContenedorLista.Parent = Panel
 
 local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 4)
+UIListLayout.Padding = UDim.new(0, 3)
 UIListLayout.Parent = ContenedorLista
 
--- Botón de Escaneo Manual / Indicador de Estado
-local BotonEscaneo = Instance.new("TextButton")
-BotonEscaneo.Size = UDim2.new(1, -16, 0, 30)
-BotonEscaneo.Position = UDim2.new(0, 8, 1, -35)
-BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-BotonEscaneo.Text = "🔍 ESCANEAR AHORA"
-BotonEscaneo.TextColor3 = Color3.fromRGB(255, 255, 255)
-BotonEscaneo.Font = Enum.Font.SourceSansBold
-BotonEscaneo.TextSize = 12
-BotonEscaneo.Parent = Panel
+-- Botón de Modo: ON/OFF
+local BotonAuto = Instance.new("TextButton")
+BotonAuto.Size = UDim2.new(1, -10, 0, 28)
+BotonAuto.Position = UDim2.new(0, 5, 1, -32)
+BotonAuto.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+BotonAuto.Text = "AUTO SCAN: OFF"
+BotonAuto.TextColor3 = Color3.fromRGB(255, 255, 255)
+BotonAuto.Font = Enum.Font.SourceSansBold
+BotonAuto.TextSize = 11
+BotonAuto.Parent = Panel
 
-local CornerEscaneo = Instance.new("UICorner")
-CornerEscaneo.CornerRadius = UDim.new(0, 6)
-CornerEscaneo.Parent = BotonEscaneo
+local CornerAuto = Instance.new("UICorner")
+CornerAuto.CornerRadius = UDim.new(0, 6)
+CornerAuto.Parent = BotonAuto
 
--- 3. CONSTRUCCIÓN DE LA LISTA INTERNA
+-- 3. CONSTRUCCIÓN DE LA LISTA
 for _, item in ipairs(FrutasConfig) do
 	local nombre = item[1]
-	
 	local Fila = Instance.new("Frame")
-	Fila.Size = UDim2.new(1, -5, 0, 28)
+	Fila.Size = UDim2.new(1, -2, 0, 24)
 	Fila.BackgroundTransparency = 1
 	Fila.Parent = ContenedorLista
 	
@@ -116,18 +112,18 @@ for _, item in ipairs(FrutasConfig) do
 	NombreTexto.TextColor3 = Color3.fromRGB(210, 210, 210)
 	NombreTexto.TextXAlignment = Enum.TextXAlignment.Left
 	NombreTexto.Font = Enum.Font.SourceSans
-	NombreTexto.TextSize = 14
+	NombreTexto.TextSize = 12
 	NombreTexto.Parent = Fila
 	
 	local BotonEstado = Instance.new("TextButton")
-	BotonEstado.Size = UDim2.new(0.4, 0, 1, -4)
-	BotonEstado.Position = UDim2.new(0.6, -2, 0, 2)
+	BotonEstado.Size = UDim2.new(0.4, 0, 1, -2)
+	BotonEstado.Position = UDim2.new(0.6, -2, 0, 1)
 	BotonEstado.Font = Enum.Font.SourceSansBold
-	BotonEstado.TextSize = 10
+	BotonEstado.TextSize = 9
 	BotonEstado.Parent = Fila
 	
 	local CornerB = Instance.new("UICorner")
-	CornerB.CornerRadius = UDim.new(0, 5)
+	CornerB.CornerRadius = UDim.new(0, 4)
 	CornerB.Parent = BotonEstado
 	
 	local function actualizarBoton(activo: boolean)
@@ -141,7 +137,6 @@ for _, item in ipairs(FrutasConfig) do
 			BotonEstado.TextColor3 = Color3.fromRGB(120, 120, 120)
 		end
 	end
-	
 	actualizarBoton(item[2])
 	
 	BotonEstado.MouseButton1Click:Connect(function()
@@ -150,66 +145,75 @@ for _, item in ipairs(FrutasConfig) do
 	end)
 end
 
--- 4. INTERRUPTOR VISUAL
+-- 4. SISTEMA PARA MOVER LA INTERFAZ CON EL DEDO (DRAGGABLE)
+local dragging, dragInput, dragStart, startPos
+local function update(input)
+	local delta = input.Position - dragStart
+	Panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+Panel.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = Panel.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then dragging = false end
+		end)
+	end
+end)
+
+Panel.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then update(input) end
+end)
+
+-- 5. INTERRUPTOR DE APERTURA / CIERRE
 BotonMenu.MouseButton1Click:Connect(function()
 	Panel.Visible = not Panel.Visible
 	BotonMenu.Text = Panel.Visible and "❌" or "🍎"
 end)
 
--- 5. FUNCIÓN CENTRALIZADA DE ESCANEO REUTILIZABLE
-local function ejecutarEscaneo(silencioso: boolean)
-	if not silencioso then
-		BotonEscaneo.Text = "ESCANEANDO..."
-		BotonEscaneo.BackgroundColor3 = Color3.fromRGB(230, 126, 34)
-	end
-	
-	local listaFiltroActiva = {}
-	for _, item in ipairs(FrutasConfig) do
-		if item[2] == true then
-			table.insert(listaFiltroActiva, item[1])
-		end
-	end
-	
-	local encontrada = false
-	
-	for _, objeto in ipairs(Workspace:GetDescendants()) do
-		if table.find(listaFiltroActiva, objeto.Name) and (objeto:IsA("Model") or objeto:IsA("BasePart")) then
-			local character = LocalPlayer.Character
-			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-			
-			if rootPart then
-				print(`🎯 [Radar] ¡Localizada automáticamente!: {objeto.Name}`)
-				rootPart.CFrame = objeto:GetPivot() * CFrame.new(0, 3, 0)
-				encontrada = true
-				break
-			end
-		end
-	end
-	
-	if not silencioso then
-		if encontrada then
-			BotonEscaneo.Text = "✅ ¡ENCONTRADA!"
-			BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-		else
-			BotonEscaneo.Text = "❌ SIN FRUTAS"
-			BotonEscaneo.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
-		end
-		task.wait(1.2)
-		BotonEscaneo.Text = "🔍 ESCANEAR AHORA"
-		BotonEscaneo.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-	end
-end
+-- 6. BUCLE DE ESCANEO ULTRA CONSTANTE (Optimizado)
+local autoScanActivo = false
 
--- Conexión al botón manual
-BotonEscaneo.MouseButton1Click:Connect(function()
-	ejecutarEscaneo(false)
+BotonAuto.MouseButton1Click:Connect(function()
+	autoScanActivo = not autoScanActivo
+	if autoScanActivo then
+		BotonAuto.Text = "🟢 SCAN CONSTANTE: ON"
+		BotonAuto.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+	else
+		BotonAuto.Text = "🔴 AUTO SCAN: OFF"
+		BotonAuto.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+	end
 end)
 
--- 6. LOOP DE AUTOMATIZACIÓN OPTIMIZADO (Segundo plano constante)
 task.spawn(function()
-	print("⚙️ [Automatizador] Loop de escaneo de fondo iniciado (Cada 15s)...")
 	while true do
-		task.wait(15) -- Revisa cada 15 segundos sin causar tirones ni lag en el procesador móvil
-		ejecutarEscaneo(true) -- Escaneo silencioso en segundo plano
+		task.wait(1.5) -- Corrección fluida cada 1.5 segundos
+		
+		if autoScanActivo then
+			local listaFiltroActiva = {}
+			for _, item in ipairs(FrutasConfig) do
+				if item[2] == true then table.insert(listaFiltroActiva, item[1]) end
+			end
+			
+			for _, objeto in ipairs(Workspace:GetDescendants()) do
+				if table.find(listaFiltroActiva, objeto.Name) and (objeto:IsA("Model") or objeto:IsA("BasePart")) then
+					local character = LocalPlayer.Character
+					local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+					if rootPart then
+						print(`🎯 [Radar Constante] Fruta encontrada: {objeto.Name}`)
+						rootPart.CFrame = objeto:GetPivot() * CFrame.new(0, 3, 0)
+						break
+					end
+				end
+			end
+		end
 	end
 end)
