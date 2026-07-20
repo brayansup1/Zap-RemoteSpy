@@ -1,10 +1,14 @@
 --!strict
--- Versión Móvil Arrastrable con Interruptor de Escaneo Constante
+-- Versión Bleach: Radar + Auto Farm con Quest Loop para Rokya
 
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -12,12 +16,49 @@ if not LocalPlayer then
 	LocalPlayer = Players.LocalPlayer
 end
 
+-- ============================================
+-- CONFIGURACIÓN
+-- ============================================
 local FrutasConfig = {
 	{"Budha", true}, {"Chop", true}, {"Flame", true}, {"Gear2", true},
 	{"Ice", true}, {"Light", true}, {"Magma", true}, {"Mochi", true},
 	{"Quake", true}, {"Rubber", true}, {"Sand", true}, {"String", true}
 }
 
+local FarmConfig = {
+	AutoFarm = false,
+	AutoQuest = false,
+	AutoSkill = false,
+	AutoDodge = false,
+	QuestLoop = false, -- NUEVO: Ciclo completo quest → farm → quest
+	SelectedQuest = "Hollows", -- "Hollows" o "Menos Grande"
+	QuestNPC = "Rokya", -- Nombre del NPC de quests
+	AttackRange = 15,
+	DodgeDistance = 20,
+	SkillCooldown = 0.5,
+	NPCsToKill = 0, -- Contador de kills
+	NPCsRequired = 5, -- Cuántos debe matar (ajusta según la quest)
+	ReturnDelay = 2 -- Segundos después de matar para volver
+}
+
+-- Lista de NPCs por tipo de quest
+local QuestNPCs = {
+	["Hollows"] = {"Hollow", "Weak Hollow", "Normal Hollow"},
+	["Menos Grande"] = {"Menos Grande", "Gillian", "Adjuchas"}
+}
+
+-- Variables de estado
+local currentTarget = nil
+local isAttacking = false
+local lastSkillTime = 0
+local farmConnection = nil
+local dodgeConnection = nil
+local questConnection = nil
+local currentState = "IDLE" -- IDLE, GOING_TO_QUEST, IN_DIALOG, FARMING, RETURNING
+
+-- ============================================
+-- GUI
+-- ============================================
 local guiVieja = CoreGui:FindFirstChild("FruitRadarMobile")
 if guiVieja then guiVieja:Destroy() end
 
@@ -26,194 +67,672 @@ ScreenGui.Name = "FruitRadarMobile"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = CoreGui
 
--- Botón Flotante Inicial
+-- Botón principal
 local BotonMenu = Instance.new("TextButton")
-BotonMenu.Name = "AlternarRadar"
-BotonMenu.Size = UDim2.new(0, 45, 0, 45)
-BotonMenu.Position = UDim2.new(1, -55, 0.15, 0)
+BotonMenu.Size = UDim2.new(0, 50, 0, 50)
+BotonMenu.Position = UDim2.new(1, -60, 0.15, 0)
 BotonMenu.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-BotonMenu.TextColor3 = Color3.fromRGB(255, 255, 255)
-BotonMenu.Text = "🍎"
-BotonMenu.TextSize = 20
+BotonMenu.Text = "📱"
+BotonMenu.TextSize = 24
 BotonMenu.Font = Enum.Font.SourceSansBold
 BotonMenu.Parent = ScreenGui
 
 local CornerBoton = Instance.new("UICorner")
-CornerBoton.CornerRadius = UDim.new(0, 10)
+CornerBoton.CornerRadius = UDim.new(0, 12)
 CornerBoton.Parent = BotonMenu
 
--- Ventana Principal Reducida
-local Panel = Instance.new("Frame")
-Panel.Name = "PanelRadar"
-Panel.Size = UDim2.new(0, 190, 0, 180) -- Tamaño ultra compacto
-Panel.Position = UDim2.new(1, -205, 0.15, 50)
-Panel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-Panel.Visible = false
-Panel.Parent = ScreenGui
+-- Panel selector
+local PanelSelector = Instance.new("Frame")
+PanelSelector.Size = UDim2.new(0, 180, 0, 100)
+PanelSelector.Position = UDim2.new(1, -195, 0.15, 55)
+PanelSelector.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+PanelSelector.Visible = false
+PanelSelector.Parent = ScreenGui
 
-local CornerPanel = Instance.new("UICorner")
-CornerPanel.CornerRadius = UDim.new(0, 10)
-CornerPanel.Parent = Panel
+local CornerSelector = Instance.new("UICorner")
+CornerSelector.CornerRadius = UDim.new(0, 10)
+CornerSelector.Parent = PanelSelector
 
--- Título (Sirve como barra de arrastre)
-local Titulo = Instance.new("TextLabel")
-Titulo.Size = UDim2.new(1, 0, 0, 25)
-Titulo.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-Titulo.Text = "  [Arrástrame] Radar"
-Titulo.TextColor3 = Color3.fromRGB(240, 240, 240)
-Titulo.TextXAlignment = Enum.TextXAlignment.Left
-Titulo.Font = Enum.Font.SourceSansBold
-Titulo.TextSize = 12
-Titulo.Parent = Panel
+local BtnRadar = Instance.new("TextButton")
+BtnRadar.Size = UDim2.new(1, -10, 0, 35)
+BtnRadar.Position = UDim2.new(0, 5, 0, 5)
+BtnRadar.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
+BtnRadar.Text = "🍎 Radar Frutas"
+BtnRadar.TextColor3 = Color3.fromRGB(255, 255, 255)
+BtnRadar.Font = Enum.Font.SourceSansBold
+BtnRadar.TextSize = 12
+BtnRadar.Parent = PanelSelector
 
-local CornerTitulo = Instance.new("UICorner")
-CornerTitulo.CornerRadius = UDim.new(0, 10)
-CornerTitulo.Parent = Titulo
+local BtnFarm = Instance.new("TextButton")
+BtnFarm.Size = UDim2.new(1, -10, 0, 35)
+BtnFarm.Position = UDim2.new(0, 5, 0, 45)
+BtnFarm.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+BtnFarm.Text = "⚔️ Auto Farm"
+BtnFarm.TextColor3 = Color3.fromRGB(255, 255, 255)
+BtnFarm.Font = Enum.Font.SourceSansBold
+BtnFarm.TextSize = 12
+BtnFarm.Parent = PanelSelector
 
-local ContenedorLista = Instance.new("ScrollingFrame")
-ContenedorLista.Size = UDim2.new(1, -10, 1, -65)
-ContenedorLista.Position = UDim2.new(0, 5, 0, 30)
-ContenedorLista.BackgroundTransparency = 1
-ContenedorLista.CanvasSize = UDim2.new(0, 0, 0, #FrutasConfig * 26)
-ContenedorLista.ScrollBarThickness = 2
-ContenedorLista.Parent = Panel
+local BtnCerrar = Instance.new("TextButton")
+BtnCerrar.Size = UDim2.new(0, 25, 0, 25)
+BtnCerrar.Position = UDim2.new(1, -30, 0, 5)
+BtnCerrar.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+BtnCerrar.Text = "X"
+BtnCerrar.TextColor3 = Color3.fromRGB(255, 255, 255)
+BtnCerrar.Font = Enum.Font.SourceSansBold
+BtnCerrar.TextSize = 14
+BtnCerrar.Parent = PanelSelector
 
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 3)
-UIListLayout.Parent = ContenedorLista
+-- Panel Farm (expandido)
+local PanelFarm = Instance.new("Frame")
+PanelFarm.Size = UDim2.new(0, 240, 0, 380)
+PanelFarm.Position = UDim2.new(1, -255, 0.15, 50)
+PanelFarm.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+PanelFarm.Visible = false
+PanelFarm.Parent = ScreenGui
 
--- Botón de Modo: ON/OFF
-local BotonAuto = Instance.new("TextButton")
-BotonAuto.Size = UDim2.new(1, -10, 0, 28)
-BotonAuto.Position = UDim2.new(0, 5, 1, -32)
-BotonAuto.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
-BotonAuto.Text = "AUTO SCAN: OFF"
-BotonAuto.TextColor3 = Color3.fromRGB(255, 255, 255)
-BotonAuto.Font = Enum.Font.SourceSansBold
-BotonAuto.TextSize = 11
-BotonAuto.Parent = Panel
+local CornerPanelFarm = Instance.new("UICorner")
+CornerPanelFarm.CornerRadius = UDim.new(0, 10)
+CornerPanelFarm.Parent = PanelFarm
 
-local CornerAuto = Instance.new("UICorner")
-CornerAuto.CornerRadius = UDim.new(0, 6)
-CornerAuto.Parent = BotonAuto
+local TituloFarm = Instance.new("TextLabel")
+TituloFarm.Size = UDim2.new(1, -30, 0, 25)
+TituloFarm.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+TituloFarm.Text = "  [Arrástrame] Auto Farm"
+TituloFarm.TextColor3 = Color3.fromRGB(255, 255, 255)
+TituloFarm.TextXAlignment = Enum.TextXAlignment.Left
+TituloFarm.Font = Enum.Font.SourceSansBold
+TituloFarm.TextSize = 12
+TituloFarm.Parent = PanelFarm
 
--- 3. CONSTRUCCIÓN DE LA LISTA
-for _, item in ipairs(FrutasConfig) do
-	local nombre = item[1]
-	local Fila = Instance.new("Frame")
-	Fila.Size = UDim2.new(1, -2, 0, 24)
-	Fila.BackgroundTransparency = 1
-	Fila.Parent = ContenedorLista
+local BtnVolverFarm = Instance.new("TextButton")
+BtnVolverFarm.Size = UDim2.new(0, 25, 0, 25)
+BtnVolverFarm.Position = UDim2.new(1, -30, 0, 0)
+BtnVolverFarm.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+BtnVolverFarm.Text = "←"
+BtnVolverFarm.TextColor3 = Color3.fromRGB(255, 255, 255)
+BtnVolverFarm.Font = Enum.Font.SourceSansBold
+BtnVolverFarm.TextSize = 14
+BtnVolverFarm.Parent = PanelFarm
+
+local ContenedorFarm = Instance.new("ScrollingFrame")
+ContenedorFarm.Size = UDim2.new(1, -10, 1, -35)
+ContenedorFarm.Position = UDim2.new(0, 5, 0, 30)
+ContenedorFarm.BackgroundTransparency = 1
+ContenedorFarm.CanvasSize = UDim2.new(0, 0, 0, 500)
+ContenedorFarm.ScrollBarThickness = 3
+ContenedorFarm.Parent = PanelFarm
+
+local UIListLayoutFarm = Instance.new("UIListLayout")
+UIListLayoutFarm.Padding = UDim.new(0, 5)
+UIListLayoutFarm.Parent = ContenedorFarm
+
+-- ============================================
+-- FUNCIONES UTILITARIAS
+-- ============================================
+
+-- Mover personaje suavemente
+local function moverAPosicion(posicion, velocidad)
+	local character = LocalPlayer.Character
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then return false end
 	
-	local NombreTexto = Instance.new("TextLabel")
-	NombreTexto.Size = UDim2.new(0.55, 0, 1, 0)
-	NombreTexto.BackgroundTransparency = 1
-	NombreTexto.Text = " " .. nombre
-	NombreTexto.TextColor3 = Color3.fromRGB(210, 210, 210)
-	NombreTexto.TextXAlignment = Enum.TextXAlignment.Left
-	NombreTexto.Font = Enum.Font.SourceSans
-	NombreTexto.TextSize = 12
-	NombreTexto.Parent = Fila
+	local distancia = (posicion - rootPart.Position).Magnitude
+	local tiempo = distancia / (velocidad or 50)
 	
-	local BotonEstado = Instance.new("TextButton")
-	BotonEstado.Size = UDim2.new(0.4, 0, 1, -2)
-	BotonEstado.Position = UDim2.new(0.6, -2, 0, 1)
-	BotonEstado.Font = Enum.Font.SourceSansBold
-	BotonEstado.TextSize = 9
-	BotonEstado.Parent = Fila
-	
-	local CornerB = Instance.new("UICorner")
-	CornerB.CornerRadius = UDim.new(0, 4)
-	CornerB.Parent = BotonEstado
-	
-	local function actualizarBoton(activo: boolean)
-		if activo then
-			BotonEstado.Text = "BUSCAR"
-			BotonEstado.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
-			BotonEstado.TextColor3 = Color3.fromRGB(255, 255, 255)
-		else
-			BotonEstado.Text = "IGNORAR"
-			BotonEstado.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
-			BotonEstado.TextColor3 = Color3.fromRGB(120, 120, 120)
+	local tween = TweenService:Create(rootPart, TweenInfo.new(tiempo, Enum.EasingStyle.Linear), {
+		CFrame = CFrame.new(posicion)
+	})
+	tween:Play()
+	tween.Completed:Wait()
+	return true
+end
+
+-- Encontrar NPC por nombre
+local function encontrarNPC(nombre)
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+			if obj.Name == nombre or obj.Name:find(nombre) then
+				return obj
+			end
 		end
 	end
-	actualizarBoton(item[2])
+	return nil
+end
+
+-- Encontrar ProximityPrompt
+local function encontrarPrompt(npc)
+	if not npc then return nil end
+	for _, obj in ipairs(npc:GetDescendants()) do
+		if obj:IsA("ProximityPrompt") then
+			return obj
+		end
+	end
+	return nil
+end
+
+-- ============================================
+-- SISTEMA DE QUEST LOOP
+-- ============================================
+
+-- Estado 1: Ir al NPC Rokya
+local function irARokya()
+	currentState = "GOING_TO_QUEST"
+	print("🚶 Yendo hacia Rokya...")
 	
-	BotonEstado.MouseButton1Click:Connect(function()
-		item[2] = not item[2]
-		actualizarBoton(item[2])
-	end)
+	local rokya = encontrarNPC(FarmConfig.QuestNPC)
+	if not rokya then
+		print("❌ No se encontró a Rokya")
+		return false
+	end
+	
+	local rootPart = rokya:FindFirstChild("HumanoidRootPart")
+	if not rootPart then return false end
+	
+	-- Moverse cerca de Rokya
+	moverAPosicion(rootPart.Position + Vector3.new(0, 0, 5), 80)
+	return true
 end
 
--- 4. SISTEMA PARA MOVER LA INTERFAZ CON EL DEDO (DRAGGABLE)
-local dragging, dragInput, dragStart, startPos
-local function update(input)
-	local delta = input.Position - dragStart
-	Panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-end
-
-Panel.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		startPos = Panel.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then dragging = false end
-		end)
-	end
-end)
-
-Panel.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInput = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput and dragging then update(input) end
-end)
-
--- 5. INTERRUPTOR DE APERTURA / CIERRE
-BotonMenu.MouseButton1Click:Connect(function()
-	Panel.Visible = not Panel.Visible
-	BotonMenu.Text = Panel.Visible and "❌" or "🍎"
-end)
-
--- 6. BUCLE DE ESCANEO ULTRA CONSTANTE (Optimizado)
-local autoScanActivo = false
-
-BotonAuto.MouseButton1Click:Connect(function()
-	autoScanActivo = not autoScanActivo
-	if autoScanActivo then
-		BotonAuto.Text = "🟢 SCAN CONSTANTE: ON"
-		BotonAuto.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+-- Estado 2: Interactuar con Rokya (presionar E)
+local function interactuarConRokya()
+	currentState = "IN_DIALOG"
+	print("💬 Interactuando con Rokya...")
+	
+	local rokya = encontrarNPC(FarmConfig.QuestNPC)
+	if not rokya then return false end
+	
+	local prompt = encontrarPrompt(rokya)
+	if not prompt then
+		-- Intentar con tecla E directamente
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.wait(0.1)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 	else
-		BotonAuto.Text = "🔴 AUTO SCAN: OFF"
-		BotonAuto.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+		fireproximityprompt(prompt)
 	end
-end)
+	
+	task.wait(1.5) -- Esperar que aparezca el diálogo
+	
+	return true
+end
 
-task.spawn(function()
-	while true do
-		task.wait(1.5) -- Corrección fluida cada 1.5 segundos
-		
-		if autoScanActivo then
-			local listaFiltroActiva = {}
-			for _, item in ipairs(FrutasConfig) do
-				if item[2] == true then table.insert(listaFiltroActiva, item[1]) end
+-- Estado 3: Seleccionar misión en el diálogo
+local function seleccionarMision()
+	print("🎯 Seleccionando misión:", FarmConfig.SelectedQuest)
+	
+	-- Buscar el botón de la misión en la GUI
+	local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+	if not playerGui then return false end
+	
+	-- Esperar un poco por el diálogo
+	task.wait(1)
+	
+	-- Buscar botones de diálogo (esto varía según el juego)
+	for _, gui in ipairs(playerGui:GetDescendants()) do
+		if gui:IsA("TextButton") or gui:IsA("ImageButton") then
+			local texto = gui.Text:lower()
+			if texto:find(FarmConfig.SelectedQuest:lower()) or 
+			   (FarmConfig.SelectedQuest == "Hollows" and texto:find("hollow")) or
+			   (FarmConfig.SelectedQuest == "Menos Grande" and texto:find("menos")) then
+				
+				print("✅ Botón encontrado:", gui.Text)
+				
+				-- Simular clic en el botón
+				local posicion = gui.AbsolutePosition + gui.AbsoluteSize / 2
+				VirtualInputManager:SendMouseButtonEvent(posicion.X, posicion.Y, 0, true, game, 1)
+				task.wait(0.1)
+				VirtualInputManager:SendMouseButtonEvent(posicion.X, posicion.Y, 0, false, game, 1)
+				
+				return true
 			end
-			
-			for _, objeto in ipairs(Workspace:GetDescendants()) do
-				if table.find(listaFiltroActiva, objeto.Name) and (objeto:IsA("Model") or objeto:IsA("BasePart")) then
-					local character = LocalPlayer.Character
-					local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-					if rootPart then
-						print(`🎯 [Radar Constante] Fruta encontrada: {objeto.Name}`)
-						rootPart.CFrame = objeto:GetPivot() * CFrame.new(0, 3, 0)
-						break
+		end
+	end
+	
+	-- Método alternativo: clic en coordenadas fijas (ajusta según tu pantalla)
+	print("⚠️ Usando método alternativo de selección...")
+	
+	-- Clic en la posición donde debería estar el botón (ajusta estas coordenadas)
+	-- Para "Hollows" generalmente es el segundo botón
+	local x, y = 800, 450 -- Ajusta según tu resolución
+	if FarmConfig.SelectedQuest == "Menos Grande" then
+		x, y = 800, 500 -- Tercer botón
+	end
+	
+	VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+	task.wait(0.1)
+	VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+	
+	return true
+end
+
+-- Estado 4: Farmear NPCs de la misión
+local function farmearNPCsMision()
+	currentState = "FARMING"
+	print("⚔️ Farmeando", FarmConfig.SelectedQuest, "...")
+	
+	local npcsTargets = QuestNPCs[FarmConfig.SelectedQuest] or {"Hollow"}
+	FarmConfig.NPCsToKill = 0
+	
+	while FarmConfig.QuestLoop and FarmConfig.NPCsToKill < FarmConfig.NPCsRequired do
+		local encontrado = false
+		
+		for _, npcName in ipairs(npcsTargets) do
+			for _, obj in ipairs(Workspace:GetDescendants()) do
+				if obj:IsA("Model") and obj.Name:find(npcName) then
+					local humanoid = obj:FindFirstChild("Humanoid")
+					local rootNPC = obj:FindFirstChild("HumanoidRootPart")
+					
+					if humanoid and humanoid.Health > 0 and rootNPC then
+						encontrado = true
+						currentTarget = obj
+						
+						-- Moverse al NPC
+						local character = LocalPlayer.Character
+						local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+						if rootPart then
+							-- Teletransporte suave hacia el NPC
+							rootPart.CFrame = CFrame.new(rootNPC.Position + Vector3.new(0, 0, 8))
+							rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootNPC.Position)
+							
+							-- Atacar
+							for i = 1, 20 do -- Ataque continuo
+								if humanoid.Health <= 0 then break end
+								
+								-- Click para atacar
+								VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+								task.wait(0.05)
+								VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+								
+								-- Skills
+								if FarmConfig.AutoSkill then
+									local tiempoActual = tick()
+									if tiempoActual - lastSkillTime >= FarmConfig.SkillCooldown then
+										lastSkillTime = tiempoActual
+										for _, tecla in ipairs({"Z", "X", "C", "V"}) do
+											VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[tecla], false, game)
+											task.wait(0.05)
+											VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[tecla], false, game)
+										end
+									end
+								end
+								
+								task.wait(0.1)
+							end
+						end
 					end
 				end
 			end
 		end
+		
+		if not encontrado then
+			-- Esperar a que aparezcan más NPCs
+			task.wait(2)
+		else
+			FarmConfig.NPCsToKill = FarmConfig.NPCsToKill + 1
+			print("☠️ NPCs matados:", FarmConfig.NPCsToKill, "/", FarmConfig.NPCsRequired)
+		end
+		
+		task.wait(0.5)
+	end
+	
+	return true
+end
+
+-- Estado 5: Regresar a Rokya
+local function regresarARokya()
+	currentState = "RETURNING"
+	print("🔄 Regresando a Rokya...")
+	
+	task.wait(FarmConfig.ReturnDelay)
+	
+	-- Reiniciar el ciclo
+	if FarmConfig.QuestLoop then
+		task.spawn(function()
+			cicloCompletoQuest()
+		end)
+	end
+end
+
+-- Ciclo completo
+function cicloCompletoQuest()
+	if not FarmConfig.QuestLoop then return end
+	
+	print("=== 🔄 INICIANDO CICLO DE QUEST ===")
+	
+	-- Paso 1: Ir a Rokya
+	if not irARokya() then
+		task.wait(3)
+		cicloCompletoQuest()
+		return
+	end
+	
+	task.wait(1)
+	
+	-- Paso 2: Interactuar
+	if not interactuarConRokya() then
+		task.wait(3)
+		cicloCompletoQuest()
+		return
+	end
+	
+	-- Paso 3: Seleccionar misión
+	if not seleccionarMision() then
+		task.wait(3)
+		cicloCompletoQuest()
+		return
+	end
+	
+	task.wait(1)
+	
+	-- Paso 4: Farmear
+	farmearNPCsMision()
+	
+	-- Paso 5: Regresar y repetir
+	regresarARokya()
+end
+
+-- ============================================
+-- CREAR CONTROLES
+-- ============================================
+
+local function crearToggle(nombre, colorOn, colorOff, callback)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, -5, 0, 35)
+	frame.BackgroundTransparency = 1
+	frame.Parent = ContenedorFarm
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.55, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = nombre
+	label.TextColor3 = Color3.fromRGB(210, 210, 210)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.SourceSansBold
+	label.TextSize = 12
+	label.Parent = frame
+	
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.4, -5, 0.8, 0)
+	btn.Position = UDim2.new(0.6, 0, 0.1, 0)
+	btn.BackgroundColor3 = colorOff
+	btn.Text = "OFF"
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 11
+	btn.Parent = frame
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+	
+	local activo = false
+	btn.MouseButton1Click:Connect(function()
+		activo = not activo
+		if activo then
+			btn.Text = "ON"
+			btn.BackgroundColor3 = colorOn
+		else
+			btn.Text = "OFF"
+			btn.BackgroundColor3 = colorOff
+		end
+		callback(activo)
+	end)
+	
+	return btn
+end
+
+local function crearDropdown(nombre, opciones, callback)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, -5, 0, 60)
+	frame.BackgroundTransparency = 1
+	frame.Parent = ContenedorFarm
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 0, 20)
+	label.BackgroundTransparency = 1
+	label.Text = nombre
+	label.TextColor3 = Color3.fromRGB(210, 210, 210)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.SourceSansBold
+	label.TextSize = 12
+	label.Parent = frame
+	
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 0, 30)
+	btn.Position = UDim2.new(0, 0, 0, 25)
+	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+	btn.Text = opciones[1] or "Seleccionar"
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.Font = Enum.Font.SourceSans
+	btn.TextSize = 11
+	btn.Parent = frame
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+	
+	local indiceActual = 1
+	btn.MouseButton1Click:Connect(function()
+		indiceActual = indiceActual % #opciones + 1
+		btn.Text = opciones[indiceActual]
+		callback(opciones[indiceActual])
+	end)
+	
+	return btn
+end
+
+local function crearSlider(nombre, min, max, default, callback)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, -5, 0, 50)
+	frame.BackgroundTransparency = 1
+	frame.Parent = ContenedorFarm
+	
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.6, 0, 0, 20)
+	label.BackgroundTransparency = 1
+	label.Text = nombre .. ": " .. default
+	label.TextColor3 = Color3.fromRGB(210, 210, 210)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.SourceSansBold
+	label.TextSize = 12
+	label.Parent = frame
+	
+	local valorActual = default
+	
+	local menosBtn = Instance.new("TextButton")
+	menosBtn.Size = UDim2.new(0, 30, 0, 25)
+	menosBtn.Position = UDim2.new(0.65, 0, 0, 22)
+	menosBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	menosBtn.Text = "-"
+	menosBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	menosBtn.Font = Enum.Font.SourceSansBold
+	menosBtn.TextSize = 14
+	menosBtn.Parent = frame
+	
+	local masBtn = Instance.new("TextButton")
+	masBtn.Size = UDim2.new(0, 30, 0, 25)
+	masBtn.Position = UDim2.new(1, -35, 0, 22)
+	masBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+	masBtn.Text = "+"
+	masBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	masBtn.Font = Enum.Font.SourceSansBold
+	masBtn.TextSize = 14
+	masBtn.Parent = frame
+	
+	local valorLabel = Instance.new("TextLabel")
+	valorLabel.Size = UDim2.new(0, 40, 0, 25)
+	valorLabel.Position = UDim2.new(0.82, -20, 0, 22)
+	valorLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+	valorLabel.Text = tostring(default)
+	valorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	valorLabel.Font = Enum.Font.SourceSansBold
+	valorLabel.TextSize = 12
+	valorLabel.Parent = frame
+	
+	local corner1 = Instance.new("UICorner")
+	corner1.CornerRadius = UDim.new(0, 4)
+	corner1.Parent = menosBtn
+	
+	local corner2 = Instance.new("UICorner")
+	corner2.CornerRadius = UDim.new(0, 4)
+	corner2.Parent = masBtn
+	
+	local corner3 = Instance.new("UICorner")
+	corner3.CornerRadius = UDim.new(0, 4)
+	corner3.Parent = valorLabel
+	
+	menosBtn.MouseButton1Click:Connect(function()
+		valorActual = math.max(min, valorActual - 1)
+		valorLabel.Text = tostring(valorActual)
+		label.Text = nombre .. ": " .. valorActual
+		callback(valorActual)
+	end)
+	
+	masBtn.MouseButton1Click:Connect(function()
+		valorActual = math.min(max, valorActual + 1)
+		valorLabel.Text = tostring(valorActual)
+		label.Text = nombre .. ": " .. valorActual
+		callback(valorActual)
+	end)
+end
+
+-- ============================================
+-- CONTROLES DEL FARM
+-- ============================================
+
+-- Toggle Quest Loop (NUEVO)
+crearToggle("🔄 Quest Loop", Color3.fromRGB(155, 89, 182), Color3.fromRGB(55, 55, 60), function(activo)
+	FarmConfig.QuestLoop = activo
+	if activo then
+		cicloCompletoQuest()
+	else
+		currentState = "IDLE"
 	end
 end)
+
+-- Dropdown de Quest
+crearDropdown("📋 Tipo Quest", {"Hollows", "Menos Grande"}, function(seleccion)
+	FarmConfig.SelectedQuest = seleccion
+	print("Quest seleccionada:", seleccion)
+end)
+
+-- Toggle Auto Skill
+crearToggle("💥 Auto Skill", Color3.fromRGB(52, 152, 219), Color3.fromRGB(55, 55, 60), function(activo)
+	FarmConfig.AutoSkill = activo
+end)
+
+-- Toggle Auto Dodge
+crearToggle("💨 Auto Dodge", Color3.fromRGB(241, 196, 15), Color3.fromRGB(55, 55, 60), function(activo)
+	FarmConfig.AutoDodge = activo
+end)
+
+-- Slider NPCs requeridos
+crearSlider("☠️ NPCs a matar", 1, 20, 5, function(valor)
+	FarmConfig.NPCsRequired = valor
+end)
+
+-- Slider delay regreso
+crearSlider("⏱️ Delay regreso", 1, 10, 2, function(valor)
+	FarmConfig.ReturnDelay = valor
+end)
+
+-- ============================================
+-- SISTEMA DE ARRASTRE
+-- ============================================
+local function hacerArrastrable(frame)
+	local dragging, dragInput, dragStart, startPos
+	
+	frame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = frame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	
+	frame.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserUserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+	
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+hacerArrastrable(PanelFarm)
+hacerArrastrable(PanelSelector)
+
+-- ============================================
+-- CONEXIONES
+-- ============================================
+BotonMenu.MouseButton1Click:Connect(function()
+	PanelSelector.Visible = not PanelSelector.Visible
+	if not PanelSelector.Visible then
+		PanelFarm.Visible = false
+	end
+end)
+
+BtnCerrar.MouseButton1Click:Connect(function()
+	PanelSelector.Visible = false
+end)
+
+BtnRadar.MouseButton1Click:Connect(function()
+	PanelSelector.Visible = false
+	print("Radar de frutas - Función no incluida en esta versión")
+end)
+
+BtnFarm.MouseButton1Click:Connect(function()
+	PanelSelector.Visible = false
+	PanelFarm.Visible = true
+end)
+
+BtnVolverFarm.MouseButton1Click:Connect(function()
+	PanelFarm.Visible = false
+	PanelSelector.Visible = true
+end)
+
+-- ============================================
+-- AUTO DODGE
+-- ============================================
+local function iniciarAutoDodge()
+	if dodgeConnection then dodgeConnection:Disconnect() end
+	
+	dodgeConnection = RunService.Heartbeat:Connect(function()
+		if not FarmConfig.AutoDodge then return end
+		
+		local character = LocalPlayer.Character
+		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+		if not rootPart then return end
+		
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj:IsA("BasePart") and (obj.Name:find("Attack") or obj.Name:find("Hitbox")) then
+				if (obj.Position - rootPart.Position).Magnitude < 10 then
+					local dodgeDirection = Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)).Unit * FarmConfig.DodgeDistance
+					rootPart.CFrame = CFrame.new(rootPart.Position + dodgeDirection)
+					VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
+					task.wait(0.1)
+					VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+					break
+				end
+			end
+		end
+	end)
+end
+
+-- ============================================
+-- INICIO
+-- ============================================
+iniciarAutoDodge()
+
+print("✅ Script cargado: Auto Farm con Quest Loop")
+print("🎯 NPC de quests:", FarmConfig.QuestNPC)
+print("📱 Presiona 📱 para abrir el menú")
